@@ -1,81 +1,69 @@
+import streamlit as st
+from streamlit_drawable_canvas import st_canvas
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-import torchvision
+import numpy as np
+from PIL import Image
 import torchvision.transforms as transforms
 
-# ------------------------------
-# 1. Load Dataset (MNIST)
-# ------------------------------
-transform = transforms.Compose([transforms.ToTensor()])
-
-train_dataset = torchvision.datasets.MNIST(root='./data', train=True,
-                                           download=True, transform=transform)
-test_dataset = torchvision.datasets.MNIST(root='./data', train=False,
-                                          download=True, transform=transform)
-
-train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                           batch_size=64, shuffle=True)
-test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                          batch_size=64, shuffle=False)
-
-# ------------------------------
-# 2. Define CNN Model
-# ------------------------------
 class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)   # 1→16
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)  # 16→32
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
         self.fc1 = nn.Linear(32 * 7 * 7, 128)
-        self.fc2 = nn.Linear(128, 10)  # 10 classes (digits 0-9)
-
+        self.fc2 = nn.Linear(128, 10)
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))   # [1,28,28] → [16,14,14]
-        x = self.pool(F.relu(self.conv2(x)))   # [16,14,14] → [32,7,7]
-        x = x.view(-1, 32 * 7 * 7)             # flatten
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 32 * 7 * 7)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
 
-# ------------------------------
-# 3. Initialize Model
-# ------------------------------
-device = torch.device("cpu")
-model = CNN().to(device)
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+@st.cache_resource
+def load_model():
+    device = torch.device("cpu")
+    model = CNN().to(device)
+    model.load_state_dict(torch.load("mnist_cnn_model.pth", map_location=device))
+    model.eval()
+    return model, device
 
-# ------------------------------
-# 4. Training
-# ------------------------------
-epochs = 5
-for epoch in range(epochs):
-    running_loss = 0.0
-    for images, labels in train_loader:
-        images, labels = images.to(device), labels.to(device)
+model, device = load_model()
 
-        optimizer.zero_grad()
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+st.set_page_config(page_title="Digit Predictor")
 
-        running_loss += loss.item()
-    print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss/len(train_loader):.4f}")
+st.title("🖤 AI Blackboard — Draw a Digit")
 
-# ------------------------------
-# 5. Evaluation
-# ------------------------------
-correct, total = 0, 0
-with torch.no_grad():
-    for images, labels in test_loader:
-        images, labels = images.to(device), labels.to(device)
-        outputs = model(images)
-        _, predicted = torch.max(outputs, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+canvas = st_canvas(
+    stroke_width=14,
+    stroke_color="white",
+    background_color="black",
+    width=280,
+    height=280,
+    drawing_mode="freedraw",
+    key="canvas",
+)
 
-print(f"\nTest Accuracy: {100 * correct / total:.2f}%")
+predict_btn = st.button("🔮 Predict Digit")
+
+if predict_btn and canvas.image_data is not None:
+    img = canvas.image_data.astype("uint8")
+    pil = Image.fromarray(img).convert("L")
+    pil = pil.resize((28, 28))
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+    tensor = transform(pil).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        out = model(tensor)
+        prob = F.softmax(out, dim=1).cpu().numpy()[0]
+        digit = int(np.argmax(prob))
+        conf = float(prob[digit]) * 100
+
+    st.success(f"Predicted Digit: **{digit}**")
+    st.info(f"Confidence: **{conf:.2f}%** ⭐")
