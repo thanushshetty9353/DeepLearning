@@ -1,4 +1,6 @@
 import streamlit as st
+st.set_page_config(page_title="Digit Predictor")   # 🔥 MUST be first Streamlit command
+
 from streamlit_drawable_canvas import st_canvas
 import torch
 import torch.nn as nn
@@ -7,6 +9,8 @@ import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
 
+
+# ----------------------- MODEL -----------------------
 class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
@@ -15,6 +19,7 @@ class CNN(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
         self.fc1 = nn.Linear(32 * 7 * 7, 128)
         self.fc2 = nn.Linear(128, 10)
+
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
@@ -22,6 +27,7 @@ class CNN(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
+
 
 @st.cache_resource
 def load_model():
@@ -31,10 +37,11 @@ def load_model():
     model.eval()
     return model, device
 
+
 model, device = load_model()
 
-st.set_page_config(page_title="Digit Predictor")
 
+# ----------------------- UI -----------------------
 st.title("🖤 AI Blackboard — Draw a Digit")
 
 canvas = st_canvas(
@@ -49,10 +56,13 @@ canvas = st_canvas(
 
 predict_btn = st.button("🔮 Predict Digit")
 
+
+# ----------------------- PREDICTION -----------------------
 if predict_btn and canvas.image_data is not None:
     img = canvas.image_data.astype("uint8")
     pil = Image.fromarray(img).convert("L")
     pil = pil.resize((28, 28))
+
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,))
@@ -65,5 +75,5 @@ if predict_btn and canvas.image_data is not None:
         digit = int(np.argmax(prob))
         conf = float(prob[digit]) * 100
 
-    st.success(f"Predicted Digit: **{digit}**")
+    st.success(f"Predicted Digit: **{digit}** 😎")
     st.info(f"Confidence: **{conf:.2f}%** ⭐")
