@@ -13,10 +13,10 @@ import plotly.graph_objects as go
 # ----------------------- MODEL -----------------------
 class CNN(nn.Module):
     def __init__(self):
-        super(CNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.fc1 = nn.Linear(32 * 7 * 7, 128)
         self.fc2 = nn.Linear(128, 10)
 
@@ -25,8 +25,7 @@ class CNN(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(-1, 32 * 7 * 7)
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        return self.fc2(x)
 
 
 @st.cache_resource
@@ -41,53 +40,83 @@ def load_model():
 model, device = load_model()
 
 
-# ----------------------- CUSTOM CSS -----------------------
+# ----------------------- RESPONSIVE CSS -----------------------
 st.markdown("""
 <style>
+/* Title */
+.title {
+    font-size: 36px;
+    font-weight: 900;
+    text-align: center;
+    color: white;
+    background: linear-gradient(90deg, #7928CA, #FF0080);
+    padding: 16px;
+    border-radius: 16px;
+    margin-bottom: 20px;
+}
+
+/* Card Style */
+.glass-card {
+    background: rgba(255,255,255,0.15);
+    padding: 20px;
+    border-radius: 18px;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+/* MOBILE RESPONSIVE FIX */
+@media (max-width: 600px) {
     .title {
-        font-size: 42px;
-        font-weight: 900;
-        text-align: center;
-        color: #ffffff;
-        background: linear-gradient(90deg, #7928CA, #FF0080);
-        padding: 18px;
-        border-radius: 16px;
-        margin-bottom: 25px;
+        font-size: 26px;
+        padding: 10px;
     }
-    .glass-card {
-        background: rgba(255,255,255,0.1);
-        padding: 20px;
-        border-radius: 18px;
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255,255,255,0.3);
+    .stButton>button {
+        font-size: 16px !important;
+        padding: 10px !important;
     }
+}
 </style>
 """, unsafe_allow_html=True)
-
 
 
 # ----------------------- HEADER -----------------------
 st.markdown("<div class='title'>🖤 AI Blackboard — Draw a Digit</div>", unsafe_allow_html=True)
 
+# ----------------------- RESPONSIVE COLUMN HANDLING -----------------------
+# Streamlit has a built-in way: Just use columns normally.
+# On mobile devices, Streamlit will automatically stack them vertically.
 
-col1, col2 = st.columns([1,1])
+col1, col2 = st.columns([1, 1])
+
+# Detect mobile width using CSS (pure HTML trick)
+st.markdown("""
+<script>
+var width = window.innerWidth;
+document.cookie = "screen_width=" + width;
+</script>
+""", unsafe_allow_html=True)
+
+width = int(st.session_state.get("screen_width", 900))
+
+# Responsive canvas size
+canvas_size = 260 if width < 600 else 280
+
 
 # ----------------------- CANVAS -----------------------
 with col1:
     st.markdown("### ✏️ Draw Here")
-    with st.container():
-        canvas = st_canvas(
-            stroke_width=18,
-            stroke_color="white",
-            background_color="black",
-            width=280,
-            height=280,
-            drawing_mode="freedraw",
-            key="canvas",
-        )
 
-    predict_btn = st.button(" Predict Digit", use_container_width=True)
+    canvas = st_canvas(
+        stroke_width=18,
+        stroke_color="white",
+        background_color="black",
+        width=canvas_size,
+        height=canvas_size,
+        drawing_mode="freedraw",
+        key="canvas",
+    )
+
+    predict_btn = st.button("🔮 Predict Digit", use_container_width=True)
     clear_btn = st.button("🧹 Clear Board", use_container_width=True)
 
     if clear_btn:
@@ -114,7 +143,7 @@ with col2:
 
         with torch.no_grad():
             out = model(tensor)
-            prob = F.softmax(out, dim=1).cpu().numpy()[0]
+            prob = F.softmax(out, 1).cpu().numpy()[0]
             digit = int(np.argmax(prob))
             conf = float(prob[digit]) * 100
 
@@ -130,8 +159,8 @@ with col2:
         )
 
         # ---------- Live Digit Preview ----------
-        st.markdown("### Processed 28×28 Image")
-        st.image(pil.resize((140,140)), caption="MNIST-scaled Input", width=140)
+        st.markdown("### 🖼️ Processed 28×28 Image")
+        st.image(pil.resize((150,150)), caption="MNIST Input", width=150)
 
         # ---------- TOP-3 Prediction Chart ----------
         st.markdown("### 🔝 Top-3 Probabilities")
@@ -144,8 +173,7 @@ with col2:
         ])
         fig.update_layout(
             yaxis=dict(range=[0, 1]),
-            height=350,
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
+            height=320,
+            margin=dict(l=10, r=10, t=10, b=10),
         )
         st.plotly_chart(fig, use_container_width=True)
